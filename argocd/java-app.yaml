@@ -1,0 +1,20 @@
+# Argo CD Application: keeps namespace java-app-argocd in sync with apps/java-app/overlays/argocd.
+# Apply once with: kubectl apply -f argocd/java-app.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: java-app
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/Praneshragavendar/gitops-flux-vs-argocd
+    targetRevision: main
+    path: apps/java-app/overlays/argocd
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: java-app-argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

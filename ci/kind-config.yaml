@@ -1,13 +1,17 @@
-# Single-node kind cluster for the CI end-to-end test.
-# The NodePorts of both app copies are mapped to the runner so curl can reach them.
+# kind cluster for the CI end-to-end test: 1 control plane + 2 workers,
+# the same shape as the original on-prem kubeadm cluster.
+# NodePorts are mapped to the runner so curl can reach every app copy
+# (kube-proxy on the control-plane node forwards to pods on the workers).
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
 nodes:
   - role: control-plane
     extraPortMappings:
-      # mompop-cafe-flux   (cafe-web NodePort 30080)
-      - containerPort: 30080
-        hostPort: 30080
-      # mompop-cafe-argocd (cafe-web NodePort 30081)
-      - containerPort: 30081
-        hostPort: 30081
+      - { containerPort: 30080, hostPort: 30080 }  # mompop-cafe  (Flux)
+      - { containerPort: 30081, hostPort: 30081 }  # mompop-cafe  (Argo CD)
+      - { containerPort: 30090, hostPort: 30090 }  # cafe-static  (Flux)
+      - { containerPort: 30091, hostPort: 30091 }  # cafe-static  (Argo CD)
+      - { containerPort: 30092, hostPort: 30092 }  # java-app     (Flux)
+      - { containerPort: 30093, hostPort: 30093 }  # java-app     (Argo CD)
+  - role: worker
+  - role: worker

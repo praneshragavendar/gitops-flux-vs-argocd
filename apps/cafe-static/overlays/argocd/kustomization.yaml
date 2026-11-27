@@ -1,0 +1,24 @@
+# Copy of cafe-static managed by Argo CD.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: cafe-static-argocd
+
+resources:
+  - namespace.yaml
+  - ../../base
+
+labels:
+  - pairs:
+      gitops.tool: argocd
+    includeSelectors: false
+
+# Each copy needs its own NodePort so both can run in the same cluster
+patches:
+  - target:
+      kind: Service
+      name: cafe-static
+    patch: |-
+      - op: replace
+        path: /spec/ports/0/nodePort
+        value: 30091

@@ -8,7 +8,7 @@ on:
       - "clusters/**"
       - "argocd/**"
       - "infrastructure/**"
-      - "app/web/**"
+      - "app/**"
       - "ci/**"
       - ".github/workflows/e2e-kind.yaml"
   # Run it by hand from the Actions tab
@@ -26,8 +26,12 @@ jobs:
 
       - name: Validate manifests render
         run: |
-          kubectl kustomize apps/mompop-cafe/overlays/flux   > /dev/null
-          kubectl kustomize apps/mompop-cafe/overlays/argocd > /dev/null
+          for app in mompop-cafe cafe-static java-app; do
+            for tool in flux argocd; do
+              echo "rendering apps/$app/overlays/$tool"
+              kubectl kustomize "apps/$app/overlays/$tool" > /dev/null
+            done
+          done
           kubectl kustomize infrastructure/monitoring/stack  > /dev/null
           kubectl kustomize infrastructure/monitoring/config > /dev/null
 
@@ -54,7 +58,7 @@ jobs:
           flux get all -A || true
           kubectl -n argocd get applications.argoproj.io -o yaml || true
           kubectl get events -A --sort-by=.lastTimestamp | tail -60 || true
-          for ns in mompop-cafe-flux mompop-cafe-argocd monitoring; do
+          for ns in mompop-cafe-flux mompop-cafe-argocd cafe-static-flux cafe-static-argocd java-app-flux java-app-argocd monitoring; do
             kubectl -n "$ns" describe pods | tail -80 || true
           done
 

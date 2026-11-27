@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cafe-static
+  labels:
+    app: cafe-static
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cafe-static
+  template:
+    metadata:
+      labels:
+        app: cafe-static
+    spec:
+      containers:
+        - name: cafe-static
+          # Built and pushed by .github/workflows/build-image.yaml when a v* tag is pushed
+          image: ghcr.io/praneshragavendar/cafe-static-web:v1.0.0
+          ports:
+            - containerPort: 80
+              name: http
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 23
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 50m
+              memory: 32Mi
+            limits:
+              cpu: 500m
+              memory: 128Mi

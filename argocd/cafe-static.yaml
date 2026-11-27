@@ -1,0 +1,20 @@
+# Argo CD Application: keeps namespace cafe-static-argocd in sync with apps/cafe-static/overlays/argocd.
+# Apply once with: kubectl apply -f argocd/cafe-static.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cafe-static
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/Praneshragavendar/gitops-flux-vs-argocd
+    targetRevision: main
+    path: apps/cafe-static/overlays/argocd
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: cafe-static-argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

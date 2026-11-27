@@ -2,11 +2,11 @@
 
 [![E2E on kind](https://github.com/praneshragavendar/gitops-flux-vs-argocd/actions/workflows/e2e-kind.yaml/badge.svg)](https://github.com/praneshragavendar/gitops-flux-vs-argocd/actions/workflows/e2e-kind.yaml)
 
-The same two-tier web app (PHP + MySQL) is deployed to one Kubernetes cluster **twice**, once by **Flux CD** and once by **Argo CD**, each into its own namespace. **Prometheus and Grafana** watch both tools so you can compare how fast they sync, how much CPU and memory they use, and how they handle errors and drift.
+Three apps (a **static site** on nginx, a **PHP + MySQL** web app, and a **Java** WAR on Tomcat) are each deployed to one Kubernetes cluster **twice**, once by **Flux CD** and once by **Argo CD**, each copy in its own namespace. **Prometheus and Grafana** watch both tools so you can compare how fast they sync, how much CPU and memory they use, and how they handle errors and drift.
 
 Git is the single source of truth. No one runs `kubectl apply` for the app: a change goes in through a commit, and the GitOps tools roll it out.
 
-**Verified end to end in CI:** every change runs the whole setup on a throwaway Kubernetes cluster (kind) in GitHub Actions: both tools deploy the app, Prometheus and Grafana come up, both copies are smoke-tested, a drift test runs, and real metrics are pulled from Prometheus into the job summary. See [Verified in CI](#verified-in-ci).
+**Verified end to end in CI:** every change runs the whole setup on a throwaway 3-node Kubernetes cluster (kind: 1 control plane + 2 workers) in GitHub Actions: both tools deploy all three apps, Prometheus and Grafana come up, both copies are smoke-tested, a drift test runs, and real metrics are pulled from Prometheus into the job summary. See [Verified in CI](#verified-in-ci).
 
 ## Architecture
 
@@ -55,27 +55,34 @@ flowchart LR
 
 ```
 .
-├── app/web/                          # PHP app source + Dockerfile (built by CI)
-├── apps/mompop-cafe/
-│   ├── base/                         # the app: Deployments, Services, PVC, ConfigMap, DB seed script
-│   └── overlays/
-│       ├── flux/                     # → namespace mompop-cafe-flux,   NodePort 30080
-│       └── argocd/                   # → namespace mompop-cafe-argocd, NodePort 30081
-├── argocd/
-│   └── mompop-cafe.yaml              # Argo CD Application → overlays/argocd
+├── app/
+│   ├── web/                          # PHP app source + Dockerfile (dynamic, uses MySQL)
+│   ├── static/                       # static site + nginx Dockerfile
+│   └── java/                         # Maven WAR + multi-stage Dockerfile (Tomcat)
+├── apps/
+│   ├── mompop-cafe/                  # PHP + MySQL: Deployments, Services, PVC, ConfigMap, DB seed script
+│   │   ├── base/
+│   │   └── overlays/flux | argocd    # → mompop-cafe-flux :30080 / mompop-cafe-argocd :30081
+│   ├── cafe-static/                  # static site
+│   │   ├── base/
+│   │   └── overlays/flux | argocd    # → cafe-static-flux :30090 / cafe-static-argocd :30091
+│   └── java-app/                     # Java WAR on Tomcat
+│       ├── base/
+│       └── overlays/flux | argocd    # → java-app-flux :30092 / java-app-argocd :30093
+├── argocd/                           # one Argo CD Application per app → apps/<app>/overlays/argocd
 ├── clusters/my-cluster/              # everything Flux syncs
 │   ├── flux-system/                  # created by `flux bootstrap`
-│   ├── mompop-cafe.yaml              # Flux Kustomization → overlays/flux
+│   ├── mompop-cafe.yaml, cafe-static.yaml, java-app.yaml   # Flux Kustomizations → apps/<app>/overlays/flux
 │   └── infrastructure.yaml           # Flux Kustomizations → monitoring stack + config
 ├── infrastructure/monitoring/
 │   ├── stack/                        # HelmRelease for kube-prometheus-stack
 │   └── config/                       # PodMonitor (Flux), ServiceMonitors (Argo CD), Grafana dashboard
 ├── ci/
-│   ├── kind-config.yaml              # kind cluster for the CI test (maps NodePorts 30080/30081)
+│   ├── kind-config.yaml              # 3-node kind cluster for the CI test (maps the six NodePorts)
 │   ├── e2e.sh                        # deploy with both tools, smoke test, drift test, collect metrics
 │   └── prom_query.py                 # queries Prometheus and writes the metrics table
 └── .github/workflows/
-    ├── build-image.yaml              # builds the app image (pushes to GHCR on v* tags)
+    ├── build-image.yaml              # builds the three app images (pushes to GHCR on v* tags)
     └── e2e-kind.yaml                 # end-to-end test on a kind cluster
 ```
 
@@ -130,16 +137,16 @@ flux bootstrap github \
 ```
 Flux installs itself, commits its manifests to `clusters/my-cluster/flux-system/`, then deploys the Flux copy of the app and the monitoring stack.
 
-### 6. Hand the second copy to Argo CD
+### 6. Hand the second copies to Argo CD
 ```bash
-kubectl apply -f argocd/mompop-cafe.yaml
+kubectl apply -f argocd/          # mompop-cafe, cafe-static, java-app
 ```
 
 ### 7. Verify
 ```bash
-flux get kustomizations                      # flux-system, mompop-cafe, monitoring-* → Ready=True
+flux get kustomizations                      # flux-system, mompop-cafe, cafe-static, java-app, monitoring-* → Ready=True
 flux get helmreleases -n monitoring          # kube-prometheus-stack → Ready=True
-kubectl -n argocd get applications           # mompop-cafe → Synced, Healthy
+kubectl -n argocd get applications           # mompop-cafe, cafe-static, java-app → Synced, Healthy
 kubectl get pods -n mompop-cafe-flux
 kubectl get pods -n mompop-cafe-argocd
 ```
@@ -150,6 +157,8 @@ kubectl get pods -n mompop-cafe-argocd
 |---|---|---|---|
 | Café (Flux copy) | `kubectl -n mompop-cafe-flux port-forward svc/cafe-web 8080:80` | http://localhost:8080 | — |
 | Café (Argo copy) | `kubectl -n mompop-cafe-argocd port-forward svc/cafe-web 8081:80` | http://localhost:8081 | — |
+| Static site | `kubectl -n cafe-static-flux port-forward svc/cafe-static 8082:80` | http://localhost:8082 | — |
+| Java app | `kubectl -n java-app-flux port-forward svc/java-app 8083:80` | http://localhost:8083 | — |
 | Argo CD | `kubectl -n argocd port-forward svc/argocd-server 8443:443` | https://localhost:8443 | `admin` / output of `kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" \| base64 -d` |
 | Grafana | `kubectl -n monitoring port-forward svc/kube-prometheus-stack-grafana 3000:80` | http://localhost:3000 | the `grafana-admin` Secret |
 | Prometheus | `kubectl -n monitoring port-forward svc/kube-prometheus-stack-prometheus 9090:9090` | http://localhost:9090 | — |
@@ -181,15 +190,15 @@ In Grafana, open **Dashboards → GitOps comparison: Flux vs Argo CD**.
 
 `.github/workflows/e2e-kind.yaml` runs on every push that touches the manifests (or by hand from the Actions tab). On a GitHub-hosted runner it:
 
-1. Creates a single-node **kind** cluster and loads the app image built from `app/web`.
+1. Creates a **kind** cluster with 1 control plane and 2 worker nodes, and loads the three app images built from `app/`.
 2. Creates the Secrets out-of-band (random passwords, never in Git), exactly as in the setup steps.
-3. Installs **Flux** (`flux install` + a read-only `GitRepository`, the same objects `flux bootstrap` would create, without needing a token) and **Argo CD**, then hands the app to both at the same moment.
-4. Waits until both copies are healthy and **smoke-tests** them: `menu.php` must return products read from MySQL.
+3. Installs **Flux** (`flux install` + a read-only `GitRepository`, the same objects `flux bootstrap` would create, without needing a token) and **Argo CD**, then hands all three apps to both at the same moment.
+4. Waits until all six copies are healthy and **smoke-tests** each one: the static page, the PHP `menu.php` (products read from MySQL), and the Java page served by Tomcat.
 5. Waits for **Prometheus and Grafana** (installed by Flux from the HelmRelease).
 6. Runs a **drift test**: scales `cafe-web` from 2 to 4 replicas by hand in both namespaces and times how long each tool takes to put it back.
 7. **Queries Prometheus** for reconcile time, CPU and memory per tool, and writes everything to the run's summary page (also uploaded as the `gitops-e2e-report` artifact).
 
-Open the latest run under **Actions → E2E on kind** to see the numbers. They come from a small single-node CI cluster, so treat them as a like-for-like comparison of the two tools, not a production benchmark.
+Open the latest run under **Actions → E2E on kind** to see the numbers. They come from a small CI cluster, so treat them as a like-for-like comparison of the two tools, not a production benchmark.
 
 ### Feature comparison
 | | Flux CD | Argo CD |
@@ -222,4 +231,4 @@ Open the latest run under **Actions → E2E on kind** to see the numbers. They c
 
 ## Credits
 
-The demo PHP application is adapted from the **AWS Academy "Mom & Pop Café"** lab. This repo's focus is the containerisation, Kubernetes manifests, CI, GitOps delivery and monitoring around it.
+The static site and the PHP application are adapted from the **AWS Academy "Mom & Pop Café"** lab. The Java app is a minimal Maven webapp from a DevOps course demo. This repo's focus is the containerisation, Kubernetes manifests, CI, GitOps delivery and monitoring around it.
