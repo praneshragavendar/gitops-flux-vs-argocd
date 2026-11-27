@@ -1,0 +1,12 @@
+# Non-secret settings shared by the web app and MySQL.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cafe-config
+data:
+  DB_HOST: mysql
+  DB_NAME: mom_pop_db
+  DB_USER: cafe
+  APP_TIMEZONE: Asia/Kolkata
+  APP_CURRENCY: "₹"
+  SHOW_SERVER_INFO: "false"

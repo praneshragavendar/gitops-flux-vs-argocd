@@ -1,0 +1,27 @@
+# Shared app definition. The overlays decide which namespace it goes into
+# and which GitOps tool (Flux or Argo CD) deploys it.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - configmap.yaml
+  - mysql-pvc.yaml
+  - mysql-deployment.yaml
+  - mysql-service.yaml
+  - web-deployment.yaml
+  - web-service.yaml
+
+# The database seed script is stored as a plain .sql file and turned into a ConfigMap
+configMapGenerator:
+  - name: cafe-db-init
+    files:
+      - db-init/create-db.sql
+
+# Extra labels on every object, without touching each Deployment's selector
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: mompop-cafe
+    includeSelectors: false
+
+# NOTE: the Secret "cafe-db-secret" is deliberately NOT in Git.
+# Create it once per namespace with kubectl (see README).

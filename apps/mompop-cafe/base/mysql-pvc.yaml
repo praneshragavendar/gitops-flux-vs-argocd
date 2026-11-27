@@ -1,0 +1,12 @@
+# Uses the cluster's default StorageClass (kind, minikube and k3s all ship one),
+# so no hand-written hostPath PersistentVolume is needed.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mysql-data
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
