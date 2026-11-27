@@ -1,0 +1,5 @@
+# Never commit real secrets
+*secret*.yaml
+.env
+*.log
+.DS_Store
