@@ -1,0 +1,22 @@
+# Argo CD Application: watches the argocd overlay and keeps namespace mompop-cafe-argocd in sync.
+# Apply once with: kubectl apply -f argocd/mompop-cafe.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: mompop-cafe
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/Praneshragavendar/gitops-flux-vs-argocd
+    targetRevision: main
+    path: apps/mompop-cafe/overlays/argocd
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: mompop-cafe-argocd
+  syncPolicy:
+    automated:
+      # Delete objects removed from Git
+      prune: true
+      # Undo manual changes made directly in the cluster
+      selfHeal: true

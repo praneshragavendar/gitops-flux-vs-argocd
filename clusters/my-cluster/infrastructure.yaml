@@ -1,0 +1,31 @@
+# Monitoring is installed in two steps: first the Helm chart (which also installs the
+# PodMonitor/ServiceMonitor CRDs), then the monitors and dashboard that need those CRDs.
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: monitoring-stack
+  namespace: flux-system
+spec:
+  interval: 30m
+  path: ./infrastructure/monitoring/stack
+  prune: true
+  wait: true
+  timeout: 10m
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: monitoring-config
+  namespace: flux-system
+spec:
+  dependsOn:
+    - name: monitoring-stack
+  interval: 30m
+  path: ./infrastructure/monitoring/config
+  prune: true
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
