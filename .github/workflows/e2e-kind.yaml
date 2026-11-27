@@ -1,0 +1,67 @@
+name: E2E on kind (Flux vs Argo CD + Prometheus)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/**"
+      - "clusters/**"
+      - "argocd/**"
+      - "infrastructure/**"
+      - "app/web/**"
+      - "ci/**"
+      - ".github/workflows/e2e-kind.yaml"
+  # Run it by hand from the Actions tab
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate manifests render
+        run: |
+          kubectl kustomize apps/mompop-cafe/overlays/flux   > /dev/null
+          kubectl kustomize apps/mompop-cafe/overlays/argocd > /dev/null
+          kubectl kustomize infrastructure/monitoring/stack  > /dev/null
+          kubectl kustomize infrastructure/monitoring/config > /dev/null
+
+      - name: Create kind cluster
+        uses: helm/kind-action@v1
+        with:
+          cluster_name: gitops
+          config: ci/kind-config.yaml
+
+      - name: Install Flux CLI
+        uses: fluxcd/flux2/action@main
+
+      - name: Deploy with Flux and Argo CD, test, measure
+        env:
+          REPO_URL: ${{ github.server_url }}/${{ github.repository }}
+          REPO_BRANCH: ${{ github.ref_name }}
+          REPORT: results/ci-report.md
+        run: bash ci/e2e.sh
+
+      - name: Debug info on failure
+        if: failure()
+        run: |
+          kubectl get pods -A -o wide || true
+          flux get all -A || true
+          kubectl -n argocd get applications.argoproj.io -o yaml || true
+          kubectl get events -A --sort-by=.lastTimestamp | tail -60 || true
+          for ns in mompop-cafe-flux mompop-cafe-argocd monitoring; do
+            kubectl -n "$ns" describe pods | tail -80 || true
+          done
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gitops-e2e-report
+          path: results/
+          if-no-files-found: ignore

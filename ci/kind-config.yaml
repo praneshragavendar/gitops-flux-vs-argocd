@@ -1,0 +1,13 @@
+# Single-node kind cluster for the CI end-to-end test.
+# The NodePorts of both app copies are mapped to the runner so curl can reach them.
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+  - role: control-plane
+    extraPortMappings:
+      # mompop-cafe-flux   (cafe-web NodePort 30080)
+      - containerPort: 30080
+        hostPort: 30080
+      # mompop-cafe-argocd (cafe-web NodePort 30081)
+      - containerPort: 30081
+        hostPort: 30081
