@@ -1,0 +1,42 @@
+# Prometheus + Grafana + kube-state-metrics + node-exporter, installed by Flux from the Helm chart.
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: kube-prometheus-stack
+  namespace: monitoring
+spec:
+  interval: 30m
+  timeout: 10m
+  chart:
+    spec:
+      chart: kube-prometheus-stack
+      # Any release from 70 up to (not including) 100; Flux picks the newest match
+      version: ">=70.0.0 <100.0.0"
+      sourceRef:
+        kind: HelmRepository
+        name: prometheus-community
+  install:
+    crds: Create
+  upgrade:
+    crds: CreateReplace
+  values:
+    # Not needed for a local demo cluster
+    alertmanager:
+      enabled: false
+    prometheus:
+      prometheusSpec:
+        retention: 3d
+        # Pick up every ServiceMonitor/PodMonitor in the cluster, not only ones labelled for this release
+        serviceMonitorSelectorNilUsesHelmValues: false
+        podMonitorSelectorNilUsesHelmValues: false
+    grafana:
+      # Admin login comes from a Secret created with kubectl, not from Git
+      admin:
+        existingSecret: grafana-admin
+        userKey: admin-user
+        passwordKey: admin-password
+      sidecar:
+        dashboards:
+          enabled: true
+          # Load any ConfigMap labelled grafana_dashboard: "1" from any namespace
+          searchNamespace: ALL
